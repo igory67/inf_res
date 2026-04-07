@@ -35,7 +35,7 @@ def list_records():
 
 
 def get_record_by_id():
-    """GET /suicides/<id>"""
+
     rid = input("ID записи: ").strip()
     if not rid:
         print("ID не может быть пустым.")
@@ -43,8 +43,9 @@ def get_record_by_id():
     resp = requests.get(f"{BASE_URL}/suicides/{rid}")
     print_response(resp)
 
+
 def create_record():
-    """POST /suicides"""
+    
     print("Введите данные в формате JSON (обязательные поля: country, year, sex, age, population, suicides_no, suicides_100k_pop)")
     print("Пример: {\"country\": \"Russia\", \"year\": 2020, \"sex\": \"male\", \"age\": \"25-34 years\", \"population\": 10000000, \"suicides_no\": 500, \"suicides_100k_pop\": 5.0}")
     data_str = input("JSON: ").strip()
@@ -56,8 +57,9 @@ def create_record():
     resp = requests.post(f"{BASE_URL}/suicides", json=data)
     print_response(resp)
 
+
 def update_record():
-    """PUT /suicides/<id>"""
+    
     rid = input("ID записи для обновления: ").strip()
     if not rid:
         print("ID не может быть пустым.")
@@ -72,8 +74,9 @@ def update_record():
     resp = requests.put(f"{BASE_URL}/suicides/{rid}", json=data)
     print_response(resp)
 
+
 def delete_record():
-    """DELETE /suicides/<id>"""
+    
     rid = input("ID записи для удаления: ").strip()
     if not rid:
         print("ID не может быть пустым.")
@@ -81,14 +84,16 @@ def delete_record():
     resp = requests.delete(f"{BASE_URL}/suicides/{rid}")
     print_response(resp)
 
+
 def total_by_year():
-    """GET /suicides/total_by_year/<year>"""
+    
     year = input("Год: ").strip()
     if not year or not year.isdigit():
         print("Некорректный год.")
         return
     resp = requests.get(f"{BASE_URL}/suicides/total_by_year/{year}")
     print_response(resp)
+
 
 def main():
     menu = {
