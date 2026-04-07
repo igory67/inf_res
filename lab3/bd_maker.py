@@ -217,66 +217,6 @@ def taskd_sum_by_year(df : pd.DataFrame) -> list[int]:
     return [row["suicides_no"] for _, row in yearly_suicides.iterrows()]
 
 
-def taskf_plot_show(df : pd.DataFrame):
-
-    #filter Russia
-    russia_data = df[df['country'] == 'Russian Federation']
-    
-    if russia_data.empty:
-        print("No data ebout Russian Federation")
-        return
-    
-    # group and sum
-    yearly_suicides = russia_data.groupby('year')['suicides_no'].sum().reset_index()
-    
-    #sorting values by year
-    yearly_suicides = yearly_suicides.sort_values('year')
-    
-    # plotting
-    plt.figure(figsize=(12, 6))
-    plt.plot(yearly_suicides['year'], yearly_suicides['suicides_no'], linestyle='-', color='red')
-    
-    plt.title('parties per year in Russian Federation', fontsize=16, fontweight='bold')
-    plt.xlabel('year', fontsize=12)
-    plt.ylabel('party_no', fontsize=12)
-    #plt.grid(True, alpha=0.3)
-    plt.xticks(yearly_suicides['year'][::2], rotation=45)  # every second year
-    
-    # values for plot
-    for _, row in yearly_suicides.iterrows():
-        plt.annotate(f'{int(row["suicides_no"]):,}', 
-                    (row['year'], row['suicides_no']),
-                    textcoords="offset points", 
-                    xytext=(0,8), 
-                    ha='center', 
-                    fontsize=7)
-    
-    plt.tight_layout()
-    plt.show()
-
-def taskg_compute_correlations(df: pd.DataFrame, col_x: str, col_y: str) -> dict:
-    x = df[col_x].dropna()
-    y = df[col_y].dropna()
-
-    common_idx = x.index.intersection(y.index)
-    x, y = x[common_idx], y[common_idx]
-
-    pearson_r, pearson_p = stats.pearsonr(x, y)
-    spearman_r, spearman_p = stats.spearmanr(x, y)
-
-    results = {
-        "pearson": {
-            "r": round(pearson_r, 4),
-            "p_value": round(pearson_p, 4),
-        },
-        "spearman": {
-            "rho": round(spearman_r, 4),
-            "p_value": round(spearman_p, 4),
-        },
-        "n": len(x),
-    }
-    return results
-
 
 def main():
     #task a
@@ -310,21 +250,6 @@ def main():
     print(f"After: {df_clean['country'].nunique()} countries")
     df = df_clean
     print('cleaning completed')
-
-    #task f
-    print('task f')
-    taskf_plot_show(df)
-    print('plot-showing completed')
-
-
-    #task g
-    data = {
-        "years": list(range(1985, 2017)),
-        "suicide_no": suicide_no_sum
-    }
-    corr_df = pd.DataFrame(data)
-
-    print(str(taskg_compute_correlations(corr_df, "years", "suicide_no")).replace('\'', "\""))
 
 
 if __name__ == "__main__":
