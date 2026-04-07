@@ -1,0 +1,15 @@
+1ab
+get data
+curl -X GET "http://localhost:5000/suicides/{id}"  
+
+1c
+post insert into table
+curl -X POST -H "Content-Type: application/json" "http://localhost:5000/suicides" -d @"test_post.json"
+
+1d
+put editing record
+curl -X PUT -H "Content-Type: application/json" "http://localhost:5000/suicides/1" -d @"test_put.json"
+
+1e
+delete record
+curl -X DELETE "http://localhost:5000/suicides/2"
