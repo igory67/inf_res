@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from lab2 import Connector
+from bd_maker import Connector
 import os
  
 app = Flask(__name__)
