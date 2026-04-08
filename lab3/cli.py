@@ -136,11 +136,31 @@ def create_record():
     resp = requests.post(f"{BASE_URL}/suicides", json=data)
     print_response(resp)
 
+def check_id(rid):
+    if not rid:
+        print("ID не должен быть пустым")
+        return False
+    
+    try:
+        resp = requests.get(f"{BASE_URL}/suicides/{rid}")
+        if resp.status_code == 404:
+            print("нет такой записи ")
+            return False
+        elif resp.status_code != 200:
+            print(f"возникла Ошибка при проверке id: {resp.status_code}")
+            return False
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка {e}")
+        return False
+    # return True
+
+
 def update_record():
     
     rid = input("ID записи для обновления: ").strip()
-    if not rid:
-        print("ID не может быть пустым.")
+    if not check_id(rid):
+        #print("ID не может быть пустым.")
         return
     
     print("Введите обновляемые поля в JSON (можно не все, например {\"suicides_no\": 600})")
@@ -157,8 +177,8 @@ def update_record():
 def delete_record():
     
     rid = input("ID записи для удаления: ").strip()
-    if not rid:
-        print("ID не может быть пустым.")
+    if not check_id(rid):
+        #print("ID не может быть пустым.")
         return
     resp = requests.delete(f"{BASE_URL}/suicides/{rid}")
     print_response(resp)
