@@ -263,7 +263,7 @@ def update_record():
     # except json.JSONDecodeError:
     #     print("Ошибка: неверный JSON.")
     #     return
-    resp = requests.put(f"{BASE_URL}/suicides/{rid}", json=data)
+    resp = requests.put(f"{BASE_URL}/suicides/{rid}", json=chosen_changes)
     print_response(resp)
 
 
@@ -280,8 +280,12 @@ def delete_record():
 def total_by_year():
     
     year = input("Год: ").strip()
-    if not year or not year.isdigit():
-        print("Некорректный год.")
+    try:
+        year = int(year)
+        if not check_year(year):
+            return
+    except: 
+        print("Ошибка с типами данных в числах.")
         return
     resp = requests.get(f"{BASE_URL}/suicides/total_by_year/{year}")
     print_response(resp)
