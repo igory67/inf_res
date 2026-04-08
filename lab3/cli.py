@@ -173,27 +173,27 @@ def update_record():
     chosen_changes = {}
 
     while (True):
-        print("Что хотите поменять? " \
-        "0 - выход" \
-        "1 - country" \
-        "2 - year" \
-        "3 - sex" \
-        "4 - age" \
-        "5 - suicides_no" \
-        "6 - population" \
+        print("Что хотите поменять?\n"
+        "0 - выход\n"
+        "1 - country\n"
+        "2 - year\n"
+        "3 - sex\n"
+        "4 - age\n"
+        "5 - suicides_no\n"
+        "6 - population\n"
         "7 - suicides/100k pop")
         decision = input("Выбор: ").strip()
-        if decision == 0:
+        if decision == "0":
             break
 
-        elif decision == 1:
+        elif decision == "1":
             country = input("Введите название страные (длина <= 30)").strip()
             if not check_empty(country):
                 continue
             country = country[:30]
             chosen_changes["country"] = country
 
-        elif decision == 2:
+        elif decision == "2":
             year = input("Год (year, 1985-2016): ").strip()
             try:
                 year = int(year)
@@ -214,14 +214,12 @@ def update_record():
                             '35-54 years', '55-74 years', '75+ years']
             print(f"Возрастные группы (age): {', '.join(valid_ages)}")
             age = input("Возрастная группа: ").strip()
-            try:
-                age = int(age)
-                if not check_age(age):
-                    continue
-                chosen_changes["age"] = age
-            except ValueError:
-                print("Ошибка с типами данных в числах.")
-                continue 
+            
+            age = int(age)
+            if not check_age(age):
+                continue
+            chosen_changes["age"] = age
+            
         elif decision == "5":
             suicides_str = input("Число суицидов (suicides_no, >=0): ").strip() 
             try:
