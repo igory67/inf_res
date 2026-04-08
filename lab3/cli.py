@@ -23,7 +23,7 @@ def list_records():
     """GET /suicides с пагинацией (фиксировано 20 записей на страницу)."""
     page = input("Номер страницы (по умолчанию 1): ").strip()
     page = int(page) if page else 1
-    per_page = 20  # фиксированное значение
+    per_page = 20  # дефолт значение
     
     params = {"page": page, "per_page": per_page}
     resp = requests.get(f"{BASE_URL}/suicides", params=params)
@@ -39,6 +39,33 @@ def get_record_by_id():
     resp = requests.get(f"{BASE_URL}/suicides/{rid}")
     print_response(resp)
 
+
+def check_year(year):
+    if year < 1985 or year > 2016:
+        print("Ошибка: год должен быть в диапазоне 1985-2016.")
+        return False
+    return True
+
+def check_int(number):
+    if number <= 0:
+        return False
+    return True
+
+def check_sex(sex):
+    if sex not in ('male', 'female'):
+        print("Ошибка: пол должен быть 'male' или 'female'.")
+        return False
+    return True
+
+def check_age(age):
+    valid_ages = ['5-14 years', '15-24 years', '25-34 years', 
+                  '35-54 years', '55-74 years', '75+ years']
+    
+    if age not in valid_ages:
+        print(f"Ошибка: возрастная группа '{age}' недопустима.")
+        print(f"Допустимые значения: {', '.join(valid_ages)}")
+        return False
+    return True
 
 def create_record():
     """POST /suicides с поочерёдным вводом полей."""
@@ -63,35 +90,37 @@ def create_record():
 
     try:
         year = int(year)
-        if year < 1985 or year > 2016:
-            print("Ошибка: год должен быть в диапазоне 1985-2016.")
+
+        if not check_year(year):
+            #print("Ошибка: год должен быть в диапазоне 1985-2016.")
             return
             
         population = int(population)
-        if population <= 0:
+        if not check_int(population):
             print("Ошибка: население должно быть больше 0.")
             return
             
         suicides_no = int(suicides_no)
-        if suicides_no < 0:
+        if not check_int(suicides_no):
             print("Ошибка: число суицидов не может быть отрицательным.")
             return
             
         suicides_100k_pop = float(suicides_100k_pop)
-        if suicides_100k_pop < 0:
+        if not check_int(suicides_100k_pop):
             print("Ошибка: показатель суицидов не может быть отрицательным.")
             return
+        
     except ValueError:
         print("Ошибка: проверьте типы данных (год, население, суициды - целые числа, показатель - число).")
         return
 
-    if sex not in ('male', 'female'):
-        print("Ошибка: пол должен быть 'male' или 'female'.")
+    if not check_sex(sex):
+        # print("Ошибка: пол должен быть 'male' или 'female'.")
         return
     
-    if age not in valid_ages:
-        print(f"Ошибка: возрастная группа '{age}' недопустима.")
-        print(f"Допустимые значения: {', '.join(valid_ages)}")
+    if not check_age(age): # not in valid_ages:
+        # print(f"Ошибка: возрастная группа '{age}' недопустима.")
+        # print(f"Допустимые значения: {', '.join(valid_ages)}")
         return
 
     data = {
@@ -113,6 +142,7 @@ def update_record():
     if not rid:
         print("ID не может быть пустым.")
         return
+    
     print("Введите обновляемые поля в JSON (можно не все, например {\"suicides_no\": 600})")
     data_str = input("JSON: ").strip()
     try:
