@@ -6,13 +6,13 @@ app = Flask(__name__)
 
 def get_db():
     return Connector()
- 
- 
+
+
 def rows_to_list(db, rows):
     cols = db.columns()
     return [dict(zip(cols, row)) for row in rows]
  
- 
+#creating xml format 
 def _to_xml(tag, records):
     items = ""
     for r in records:
@@ -21,6 +21,8 @@ def _to_xml(tag, records):
     return f'<?xml version="1.0" encoding="UTF-8"?><response>{items}</response>'
  
  
+
+#correct flask respond
 def respond(data, fmt, code=200, tag="record"):
     if fmt == "wsdl":
         records = data if isinstance(data, list) else [data]
@@ -31,10 +33,12 @@ def respond(data, fmt, code=200, tag="record"):
 #task 1a
 @app.route("/suicides", methods=["GET"])
 def list_suicides():
+
+    #pagination
     page = max(1, int(request.args.get("page", 1)))
     per_page = max(1, min(int(request.args.get("per_page", 20)), 100))
     offset = (page - 1) * per_page
-    fmt = request.args.get("format", "json").lower()
+    
  
     db = get_db()
     table = db.suic_table_name()
@@ -46,7 +50,8 @@ def list_suicides():
         f"SELECT {', '.join(db.columns())} FROM {table} ORDER BY id LIMIT %s OFFSET %s",
         [per_page, offset]
     )
- 
+
+    #formating data
     data = {
         "page": page,
         "per_page": per_page,
@@ -55,9 +60,7 @@ def list_suicides():
         "data": rows_to_list(db, rows),
     }
  
-    if fmt == "wsdl":
-        return _to_xml("suicide", data["data"]), 200, {"Content-Type": "text/xml"}
-    #return respond(data, fmt, tag='suicide')
+    
     return jsonify(data)
 
 
@@ -106,7 +109,7 @@ def create_suicide():
         return respond({"message": "Record created"}, fmt, code=201, tag='response')
  
     record = dict(zip(db.columns(), rows[0]))
-    #return jsonify(record), 201
+
     return respond(record, fmt, code=201)
 
 
@@ -121,10 +124,9 @@ def update_suicide(record_id):
     existing = db.sql_execute(
         f"SELECT id FROM {table} WHERE id = %s", [record_id]
     )
-    if not existing:
-        #return jsonify({"error": "Record not found"}), 404
+    if not existing:    
         return respond({"error": "Record not found"}, fmt,code=404)
- 
+    
     updatable = db.columns_without_id()
     updates = {k: v for k, v in body.items() if k in updatable}
  
@@ -149,6 +151,7 @@ def update_suicide(record_id):
 #task 1e
 @app.route("/suicides/<int:record_id>", methods=["DELETE"])
 def delete_suicide(record_id):
+    
     db = get_db()
     table = db.suic_table_name()
     fmt = request.args.get("format", "json").lower()
