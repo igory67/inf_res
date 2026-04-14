@@ -244,7 +244,7 @@ def update_record():
             rate_str = input("Суицидов на 100k населения (suicides_100k_pop, >=0): ").strip()
             try:
                 rate = float(rate_str)
-                if not check_int(rate):
+                if not check_int(rate): 
                     continue
                 chosen_changes["suicides_100k_pop"] = rate
             except ValueError:
