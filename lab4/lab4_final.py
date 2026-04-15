@@ -7,7 +7,7 @@ from typing import Callable
 from rapidfuzz.distance import Levenshtein, Jaro, JaroWinkler
 from rapidfuzz import fuzz
 
-
+from visual import plot_metrics_analysis, plot_score_distributions
 def levenshtein_similarity(s1, s2):
     if not s1 and not s2: return 1.0
     if not s1 or not s2: return 0.0
