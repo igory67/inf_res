@@ -7,7 +7,7 @@ from typing import Callable
 from rapidfuzz.distance import Levenshtein, Jaro, JaroWinkler
 from rapidfuzz import fuzz
 
-
+from visual import plot_metrics_analysis, plot_score_distributions
 def levenshtein_similarity(s1, s2):
     if not s1 and not s2: return 1.0
     if not s1 or not s2: return 0.0
@@ -162,6 +162,7 @@ def main():
 
     best_scores_ref = dict()
     best_metrics = {}
+    threshold_stats = {metric: [] for metric in METRICS}
 
     for metric, func in METRICS.items():
         scores = find_similar_fragments(src_windows, shrt_windows, func)
@@ -174,9 +175,18 @@ def main():
         for thr in ITER_THRESHOLDS:
             matches = get_matches(scores, thr)
             if not matches:
-                continue
-            total_len = sum([len(fr.src_text) for fr in matches])
-            avg_score = sum([fr.best_score for fr in matches]) / len(matches)
+                avg_score = 0
+                total_len = 0
+            else:
+                avg_score = sum([fr.best_score for fr in matches]) / len(matches)
+                total_len = sum([len(fr.src_text) for fr in matches])
+            
+            threshold_stats[metric].append({
+                'threshold': thr,
+                'avg_score': avg_score,
+                'total_len': total_len,
+                'num_matches': len(matches)
+            })
             
             if avg_score > best_avg_score:
                 best_avg_score = avg_score
@@ -197,6 +207,10 @@ def main():
         print(f"  Оптимальный порог: {stats['threshold']}")
         print(f"  Средняя оценка: {stats['avg_score']:.4f}")
         print(f"  Общая длина совпадений: {stats['total_len']}")
+
+    plot_metrics_analysis(threshold_stats, best_metrics)
+    plot_score_distributions(best_scores_ref, best_metrics)
+
 
 
 if __name__ == "__main__":
