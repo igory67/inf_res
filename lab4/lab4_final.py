@@ -149,9 +149,9 @@ def main():
     borodino_short = clean_text(borodino_short)
     print(f"Символов в полном тексте - {len(borodino)}, в пересказе - {len(borodino_short)}")
 
-    print("Степень похожести в процентах ", fuzz.partial_ratio(borodino_short, borodino))
+    print("Схожесть в процентах ", fuzz.partial_ratio(borodino_short, borodino))
     print("Сортировка и определение степени похожести ", fuzz.token_sort_ratio(borodino_short, borodino))
-    print("Степень похожести с игнором повторок", fuzz.token_set_ratio(borodino_short, borodino))
+    print("Схожесть с игнором повторок", fuzz.token_set_ratio(borodino_short, borodino))
 
     src_windows = split_into_fragments(borodino_short, WINDOW_INIT_SIZE, step=WINDOW_STEP)
     shrt_windows = split_into_fragments(borodino, WINDOW_INIT_SIZE, step=WINDOW_STEP)
