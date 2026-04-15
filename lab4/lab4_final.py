@@ -66,10 +66,12 @@ METRICS = {
     "jaccard": jaccard_ngram,
 }
 
-WINDOW_STEP = 2
-WINDOW_INIT_SIZE = 3
+# Параметры для перебора
+WINDOW_SIZES = [3, 5, 7, 10]
+WINDOW_STEPS = [1, 2, 3, 5]
 
 ITER_THRESHOLDS = [round(x/100, 2) for x in range(10, 81, 3)]
+
 
 @dataclass
 class FragmentMatch:
@@ -84,23 +86,6 @@ class ThresholdStats:
     avg_score: float
     threshold: float
     max_score: float
-
-
-def perform_tests():
-    s1, s2 = "Рассcчёт", "Расчёт"
-    s3, s4 = "Расчот", "Расчёт"
-    print("ЛЕВЕНШТЕЙН")
-    print(levenshtein_similarity(s1, s2), Levenshtein.normalized_similarity(s1, s2))
-    print(levenshtein_similarity(s3, s4), Levenshtein.normalized_similarity(s3, s4))
-    print("ЖАРО")
-    print(jaro(s1, s2), Jaro.normalized_similarity(s1, s2))
-    print(jaro(s3, s4), Jaro.normalized_similarity(s3, s4))
-    print("ЖАККАРД")
-    print(jaccard_ngram(s1, s2))
-    print(jaccard_ngram(s3, s4))
-    print("ЖАРО-ВИНКЛЕР")
-    print(jaro_winkler(s1, s2), JaroWinkler.normalized_similarity(s1, s2))
-    print(jaro_winkler(s3, s4), JaroWinkler.normalized_similarity(s3, s4))
 
 
 def load_text(filepath: Path) -> str:
@@ -140,63 +125,178 @@ def get_matches(scores: list[FragmentMatch], threshold: float) -> list[FragmentM
     return [fr for fr in scores if fr.best_score >= threshold]
 
 
-def main():
-    borodino = load_text(Path("texts/borodino.txt"))
-    borodino_short = load_text(Path("texts/borodino_short.txt"))
-    print(f"Символов в полном тексте (до очистки текста) - {len(borodino)}, в пересказе - {len(borodino_short)}")
-
-    borodino = clean_text(borodino)
-    borodino_short = clean_text(borodino_short)
-    print(f"Символов в полном тексте - {len(borodino)}, в пересказе - {len(borodino_short)}")
-
-    print("Схожесть в процентах ", fuzz.partial_ratio(borodino_short, borodino))
-    print("Сортировка и определение степени похожести ", fuzz.token_sort_ratio(borodino_short, borodino))
-    print("Схожесть с игнором повторок", fuzz.token_set_ratio(borodino_short, borodino))
-
-    src_windows = split_into_fragments(borodino_short, WINDOW_INIT_SIZE, step=WINDOW_STEP)
-    shrt_windows = split_into_fragments(borodino, WINDOW_INIT_SIZE, step=WINDOW_STEP)
+def evaluate_configuration(borodino_clean: str, borodino_short_clean: str, 
+                           window_size: int, step: int, min_threshold: float = 0.5) -> dict:
+    """Оценивает одну конфигурацию (window_size, step) для всех метрик"""
     
-    print(f"Фрагментов (borodino_short): {len(src_windows)}")
-    print(f"Фрагментов (borodino):  {len(shrt_windows)}")
-    print(f"Сравнений на метрику: {len(src_windows) * len(shrt_windows):,}\n")
-
-    best_scores_ref = dict()
-    best_metrics = {}
-
-    for metric, func in METRICS.items():
-        scores = find_similar_fragments(src_windows, shrt_windows, func)
-        best_scores_ref[metric] = scores
-
+    src_windows = split_into_fragments(borodino_short_clean, window_size, step=step)
+    tgt_windows = split_into_fragments(borodino_clean, window_size, step=step)
+    
+    results = {}
+    
+    for metric_name, metric_func in METRICS.items():
+        scores = find_similar_fragments(src_windows, tgt_windows, metric_func)
+        
         best_threshold = None
+        best_composite = 0
         best_avg_score = 0
         best_total_len = 0
+        best_matches_count = 0
         
         for thr in ITER_THRESHOLDS:
+            if thr < min_threshold:
+                continue
             matches = get_matches(scores, thr)
             if not matches:
                 continue
+            
             total_len = sum([len(fr.src_text) for fr in matches])
             avg_score = sum([fr.best_score for fr in matches]) / len(matches)
+            matches_count = len(matches)
             
-            if avg_score > best_avg_score:
+            composite = avg_score * (matches_count / len(src_windows)) * thr
+            
+            if composite > best_composite:
+                best_composite = composite
                 best_avg_score = avg_score
                 best_total_len = total_len
                 best_threshold = thr
-
-        best_metrics[metric] = {
+                best_matches_count = matches_count
+        
+        results[metric_name] = {
             "threshold": best_threshold,
             "avg_score": best_avg_score,
-            "total_len": best_total_len
+            "total_len": best_total_len,
+            "matches_count": best_matches_count,
+            "total_fragments": len(src_windows),
+            "composite": best_composite
         }
+    
+    return {
+        "window_size": window_size,
+        "step": step,
+        "results": results
+    }
 
-    print("\n" + "="*60)
-    print("ЛУЧШИЕ МЕТРИКИ ДЛЯ КАЖДОЙ МЕРЫ")
-    print("="*60)
-    for metric, stats in best_metrics.items():
-        print(f"\n{metric.upper()}:")
-        print(f"  Оптимальный порог: {stats['threshold']}")
-        print(f"  Средняя оценка: {stats['avg_score']:.4f}")
-        print(f"  Общая длина совпадений: {stats['total_len']}")
+
+def main():
+    # Загрузка текстов
+    borodino = load_text(Path("texts/borodino.txt"))
+    borodino_short = load_text(Path("texts/borodino_short.txt"))
+    
+    print(f"Символов в полном тексте (до очистки) - {len(borodino)}, в пересказе - {len(borodino_short)}")
+    
+    borodino_clean = clean_text(borodino)
+    borodino_short_clean = clean_text(borodino_short)
+    
+    print(f"Символов в полном тексте - {len(borodino_clean)}, в пересказе - {len(borodino_short_clean)}")
+    print(f"Слов в полном тексте - {len(borodino_clean.split())}, в пересказе - {len(borodino_short_clean.split())}")
+    
+    print("\nБыстрая оценка через rapidfuzz:")
+    print(f"  partial_ratio: {fuzz.partial_ratio(borodino_short_clean, borodino_clean):.1f}%")
+    print(f"  token_sort_ratio: {fuzz.token_sort_ratio(borodino_short_clean, borodino_clean):.1f}%")
+    print(f"  token_set_ratio: {fuzz.token_set_ratio(borodino_short_clean, borodino_clean):.1f}%")
+    
+    # Перебор всех конфигураций
+    all_configs = []
+    
+    print("\n" + "="*90)
+    print("ПЕРЕБОР ПАРАМЕТРОВ (размер окна, шаг)")
+    print("="*90)
+    
+    for window_size in WINDOW_SIZES:
+        for step in WINDOW_STEPS:
+            print(f"\n--- Тестирование: window={window_size}, step={step} ---")
+            config_result = evaluate_configuration(borodino_clean, borodino_short_clean, 
+                                                    window_size, step, min_threshold=0.5)
+            all_configs.append(config_result)
+            
+            # Краткий вывод результатов для этой конфигурации
+            for metric_name, stats in config_result["results"].items():
+                if stats["threshold"] is not None:
+                    coverage = stats["matches_count"] / stats["total_fragments"] * 100
+                    print(f"  {metric_name.upper()}: порог={stats['threshold']}, "
+                          f"совп={stats['matches_count']}/{stats['total_fragments']} ({coverage:.0f}%), "
+                          f"ср.оценка={stats['avg_score']:.3f}")
+    
+    # Сводная таблица лучших результатов для каждой метрики
+    print("\n" + "="*90)
+    print("СВОДНАЯ ТАБЛИЦА ЛУЧШИХ РЕЗУЛЬТАТОВ ДЛЯ КАЖДОЙ МЕТРИКИ")
+    print("="*90)
+    
+    best_for_metric = {}
+    for metric_name in METRICS.keys():
+        best_for_metric[metric_name] = None
+        best_composite = 0
+        
+        for config in all_configs:
+            stats = config["results"][metric_name]
+            if stats["composite"] > best_composite:
+                best_composite = stats["composite"]
+                best_for_metric[metric_name] = {
+                    "window": config["window_size"],
+                    "step": config["step"],
+                    **stats
+                }
+    
+    print(f"\n{'Метрика':<15} {'Window':<8} {'Step':<6} {'Порог':<8} {'Совп./Всего':<12} {'Покрытие':<10} {'Ср.оценка':<10}")
+    print("-"*80)
+    
+    for metric_name, best in best_for_metric.items():
+        if best and best["threshold"] is not None:
+            coverage = best["matches_count"] / best["total_fragments"] * 100
+            print(f"{metric_name.upper():<15} {best['window']:<8} {best['step']:<6} "
+                  f"{best['threshold']:<8} {best['matches_count']}/{best['total_fragments']:<9} "
+                  f"{coverage:<10.1f}% {best['avg_score']:<10.3f}")
+    
+    # Детальная таблица для визуализации
+    print("\n" + "="*90)
+    print("ДЕТАЛЬНАЯ ТАБЛИЦА ДЛЯ ВИЗУАЛИЗАЦИИ")
+    print("(Метрика | Window | Step | Порог | Покрытие% | Ср.оценка | Композит)")
+    print("="*90)
+    
+    for metric_name in METRICS.keys():
+        print(f"\n--- {metric_name.upper()} ---")
+        print(f"{'Window':<8} {'Step':<6} {'Порог':<8} {'Покрытие%':<12} {'Ср.оценка':<12} {'Композит':<12}")
+        print("-"*60)
+        
+        for config in all_configs:
+            stats = config["results"][metric_name]
+            if stats["threshold"] is not None:
+                coverage = stats["matches_count"] / stats["total_fragments"] * 100
+                print(f"{config['window_size']:<8} {config['step']:<6} "
+                      f"{stats['threshold']:<8} {coverage:<12.1f} {stats['avg_score']:<12.3f} {stats['composite']:<12.4f}")
+    
+    # Финальная рекомендация
+    print("\n" + "="*90)
+    print("ФИНАЛЬНАЯ РЕКОМЕНДАЦИЯ")
+    print("="*90)
+    
+    # Находим лучшую метрику и конфигурацию по композиту
+    best_overall = None
+    best_overall_composite = 0
+    
+    for config in all_configs:
+        for metric_name, stats in config["results"].items():
+            if stats["composite"] > best_overall_composite:
+                best_overall_composite = stats["composite"]
+                best_overall = {
+                    "metric": metric_name,
+                    "window": config["window_size"],
+                    "step": config["step"],
+                    **stats
+                }
+    
+    if best_overall:
+        coverage = best_overall["matches_count"] / best_overall["total_fragments"] * 100
+        print(f"\nЛучшая конфигурация:")
+        print(f"  Метрика: {best_overall['metric'].upper()}")
+        print(f"  Размер окна: {best_overall['window']} слов")
+        print(f"  Шаг: {best_overall['step']}")
+        print(f"  Оптимальный порог: {best_overall['threshold']}")
+        print(f"  Покрытие: {coverage:.1f}% ({best_overall['matches_count']} из {best_overall['total_fragments']} фрагментов)")
+        print(f"  Средняя оценка качества: {best_overall['avg_score']:.4f}")
+        print(f"  Общая длина совпадений: {best_overall['total_len']} символов")
 
 
 if __name__ == "__main__":
