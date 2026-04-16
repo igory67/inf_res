@@ -1,0 +1,813 @@
+import psycopg2
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy import stats
+
+class Connector:
+    
+    def __init__(self):
+    
+        self.conn = psycopg2.connect(dbname = 'lab2',
+                            user = 'postgres',
+                            password = '1234',
+                            host = 'localhost',
+                            client_encoding = "UTF8")
+        
+        self.cur = self.conn.cursor()
+    
+
+    def suic_table_name(self):
+        return 'suic_table'
+    
+
+    def columns_without_id(self):
+        return ['country',
+                'year',
+                'sex',
+                'age',
+                'suicides_no',
+                'population',
+                'suicides_100k_pop']
+    
+
+    def columns(self):
+        return ['id',
+                'country',
+                'year',
+                'sex',
+                'age',
+                'suicides_no',
+                'population',
+                'suicides_100k_pop']
+    
+
+    def sql_execute(self, sql, var = []):
+        result = []
+        try:
+            self.cur.execute(sql, var)
+            
+            if 'select' in sql.lower():
+                result = self.cur.fetchall()
+            
+            self.conn.commit()
+
+        except Exception as e:
+            print(f'Executing error - {e}')
+            self.conn.rollback()
+        
+        return result
+    
+
+    def taska_creation(self):
+        sex_fvar = 'female'
+        sex_mvar = 'male'
+
+        sql = 'create table if not exists suic_table(' \
+                'id serial primary key,' \
+                'country varchar(30), ' \
+                'year integer, ' \
+               f"sex varchar(6) check (sex = '{sex_fvar}' or sex = '{sex_mvar}'), " \
+                'age varchar(12),' \
+                'suicides_no integer, ' \
+                'population integer, ' \
+                'suicides_100k_pop numeric(5,2));'
+
+        self.sql_execute(sql)
+    
+
+    def taskb_insert_into_table(self, var):
+        
+        for atr in var:
+            atr = str(atr)
+        
+        sql = f'insert into {self.suic_table_name()} ({", ".join(self.columns_without_id())}) ' \
+                f'values ( {", ".join(["%s"] * len(self.columns_without_id()))} )'
+        
+        self.sql_execute(sql, var)
+
+
+def taskb_check_row(row):
+    result = []
+
+    if row['country'] is not None:
+        result.append(str(row['country']))
+    else:
+        result.append(None)
+    
+    if row['year'] is not None:
+        result.append(int(row['year']))
+    else:
+        result.append(None)
+    
+    if row['sex'] is not None:
+        result.append(str(row['sex']))
+    else:
+        result.append(None)
+
+    if row['age'] is not None:
+        result.append(str(row['age']))
+    else:
+        result.append(None)
+    
+    if row['suicides_no'] is not None:
+        result.append(int(row['suicides_no']))
+    else:
+        result.append(None)
+    
+    if row['population'] is not None:
+        result.append(int(row['population']))
+    else:
+        result.append(None)
+    
+    if float(row['suicides/100k pop']) is not None:
+        result.append(float(row['suicides/100k pop']))
+    else:
+        result.append(None)
+    
+    return result
+
+def taskb_getting_info(filename):
+
+    df = pd.read_csv(filename) # read csv 
+
+    columns_needed = ['country', 'year', 'sex', 'age', 'suicides_no', 'population', 'suicides/100k pop'] #needed atr
+
+    df_filtered = df[columns_needed] #filter columns
+    df_filtered = df_filtered.replace({'': None})
+    
+    result_info = []
+    
+    for _, row in df_filtered.iterrows():
+        values = taskb_check_row(row)
+        result_info.append(values)
+    
+    return result_info
+    
+def taskb_uploading_info(db_conn : Connector, result_info):
+    
+    try:
+        for row in result_info:
+            db_conn.taskb_insert_into_table(row)
+
+    except Exception as e:
+        print(f' Error while uploading data - {e}')
+
+
+def taskc_cleaning_resulting_info(filename):
+    
+    df = pd.read_csv(filename)
+
+    original_count = len(df)
+    
+    # 1. deleting rows with at least one of this columns = NULL
+    columns_needed = ['country', 'year', 'sex', 'age', 'suicides_no', 'population', 'suicides/100k pop']
+
+    df = df.dropna(subset=columns_needed)
+    
+    # 2. sex filter
+    df = df[df['sex'].isin(['male', 'female'])]
+    
+    # 3. year filter
+    df = df[(df['year'] >= 1985) & (df['year'] <= 2016)]
+    
+    # 4. population filter
+    df = df[df['population'] > 0]
+    
+    # 5. cnt suicide filter
+    df = df[df['suicides_no'] >= 0]
+    
+    # 6. age filter
+    valid_ages = ['5-14 years', '15-24 years', '25-34 years', 
+                  '35-54 years', '55-74 years', '75+ years']
+    
+    df = df[df['age'].isin(valid_ages)]
+    
+    # 7. check formulas
+    df['expected_rate'] = (df['suicides_no'] / df['population']) * 100000
+    df['rate_diff'] = abs(df['suicides/100k pop'] - df['expected_rate'])
+    df = df[df['rate_diff'] < 0.01]
+    
+    
+    # deleting temp atr
+    df = df.drop(['expected_rate', 'rate_diff'], axis=1)
+    
+    # deleting duplicates
+    df = df.drop_duplicates()
+    
+    print(f"Data cleaning completed:")
+    print(f"  - Original rows: {original_count}")
+    print(f"  - Rows after cleaning: {len(df)}")
+    print(f"  - Removed {original_count - len(df)} rows")
+    
+    return df
+
+
+def taske_cleaning(df: pd.DataFrame) -> pd.DataFrame:
+    countries_with_zero = df.loc[df['suicides_no'] == 0, 'country'].unique()
+    result = df[~df['country'].isin(countries_with_zero)].reset_index(drop=True)
+    return result
+
+def taskd_sum_by_year(df : pd.DataFrame) -> list[int]:
+
+    yearly_suicides = df.groupby('year')['suicides_no'].sum().reset_index()
+    
+    for _, row in yearly_suicides.iterrows():
+        print('-'*40)
+        print(f'year = {row["year"]} | party_no = {row["suicides_no"]}')
+    return [row["suicides_no"] for _, row in yearly_suicides.iterrows()]
+
+
+
+def main():
+    #task a
+    print('task a')
+    db_conn = Connector()
+    db_conn.taska_creation()
+    print('creation completed\n')
+
+    #task b
+    print('task b')
+    filename = 'master.csv'
+    result_info = taskb_getting_info(filename)
+    #taskb_uploading_info(db_conn, result_info)
+    print('insertion completed\n')
+
+    #task c
+    print('task c')
+    df = taskc_cleaning_resulting_info(filename)
+    print(df.columns)
+    print('cleaning completed\n')
+
+    #task d
+    print('task d')
+    suicide_no_sum = taskd_sum_by_year(df)
+    print('aggregation completed')
+
+    #task e
+    print('task e')
+    df_clean = taske_cleaning(df)
+    print(f"Before: {df['country'].nunique()} countries")
+    print(f"After: {df_clean['country'].nunique()} countries")
+    df = df_clean
+    print('cleaning completed')
+
+
+if __name__ == "__main__":
+    main()
+
+------------------------------------
+
+from flask import Flask, request, jsonify
+from bd_maker import Connector
+import os
+ 
+app = Flask(__name__)
+
+def get_db():
+    return Connector()
+
+
+def rows_to_list(db, rows):
+    cols = db.columns()
+    return [dict(zip(cols, row)) for row in rows]
+ 
+#creating xml format 
+def _to_xml(tag, records):
+    items = ""
+    for r in records:
+        fields = "".join(f"<{k}>{v}</{k}>" for k, v in r.items())
+        items += f"<{tag}>{fields}</{tag}>"
+    return f'<?xml version="1.0" encoding="UTF-8"?><response>{items}</response>'
+ 
+ 
+
+#correct flask respond
+def respond(data, fmt, code=200, tag="record"):
+    if fmt == "wsdl":
+        records = data if isinstance(data, list) else [data]
+        return _to_xml(tag, records), code, {"Content-Type": "text/xml"}
+    return jsonify(data), code
+
+
+#task 1a
+@app.route("/suicides", methods=["GET"])
+def list_suicides():
+
+    #pagination
+    page = max(1, int(request.args.get("page", 1)))
+    per_page = max(1, min(int(request.args.get("per_page", 20)), 100))
+    offset = (page - 1) * per_page
+    
+ 
+    db = get_db()
+    table = db.suic_table_name()
+ 
+    total_rows = db.sql_execute(f"SELECT COUNT(*) FROM {table}")
+    total = total_rows[0][0] if total_rows else 0
+ 
+    rows = db.sql_execute(
+        f"SELECT {', '.join(db.columns())} FROM {table} ORDER BY id LIMIT %s OFFSET %s",
+        [per_page, offset]
+    )
+
+    #formating data
+    data = {
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_pages": (total + per_page - 1) // per_page,
+        "data": rows_to_list(db, rows),
+    }
+ 
+    
+    return jsonify(data)
+
+
+#task 1b
+@app.route("/suicides/<int:record_id>", methods=["GET"])
+def get_suicide(record_id):
+    fmt = request.args.get("format", "json").lower()
+    db = get_db()
+    table = db.suic_table_name()
+ 
+    rows = db.sql_execute(
+        f"SELECT {', '.join(db.columns())} FROM {table} WHERE id = %s",
+        [record_id]
+    )
+ 
+    if not rows:
+        return respond({"error": "Record not found"}, fmt, tag='response', code=404)
+ 
+    record = dict(zip(db.columns(), rows[0]))
+    return respond(record, fmt, tag="suicide")
+
+
+#task 1c
+@app.route("/suicides", methods=["POST"])
+def create_suicide():
+    body = request.get_json(force=True)
+    fmt = request.args.get("format", "json").lower()
+    db = get_db()
+    missing = [f for f in ['country', 'year', 'sex', 'age', 'population', 'suicides_no', 'suicides_100k_pop'] if f not in body]
+ 
+    if missing:
+        return respond({"error": f"Missing required fields: {missing}"}, fmt, tag='response', code=404)
+ 
+    values = [body.get(col) for col in db.columns_without_id()]
+    db.taskb_insert_into_table(values)
+ 
+
+    rows = db.sql_execute(
+        f"SELECT {', '.join(db.columns())} FROM {db.suic_table_name()} "
+        f"WHERE country=%s AND year=%s AND sex=%s AND age=%s "
+        f"ORDER BY id DESC LIMIT 1",
+        [body['country'], body['year'], body['sex'], body['age']]
+    )
+ 
+    if not rows:
+        return respond({"message": "Record created"}, fmt, code=201, tag='response')
+ 
+    record = dict(zip(db.columns(), rows[0]))
+
+    return respond(record, fmt, code=201)
+
+
+#task 1d
+@app.route("/suicides/<int:record_id>", methods=["PUT"])
+def update_suicide(record_id):
+    body = request.get_json(force=True)
+    fmt = request.args.get("format", "json").lower()
+    db = get_db()
+    table = db.suic_table_name()
+ 
+    existing = db.sql_execute(
+        f"SELECT id FROM {table} WHERE id = %s", [record_id]
+    )
+    if not existing:    
+        return respond({"error": "Record not found"}, fmt,code=404)
+    
+    updatable = db.columns_without_id()
+    updates = {k: v for k, v in body.items() if k in updatable}
+ 
+    if not updates:
+        return jsonify({"error": "No valid fields to update"}), 400
+ 
+    set_expr = ", ".join(f"{k} = %s" for k in updates)
+    values = list(updates.values()) + [record_id]
+ 
+    db.sql_execute(
+        f"UPDATE {table} SET {set_expr} WHERE id = %s", values
+    )
+ 
+    rows = db.sql_execute(
+        f"SELECT {', '.join(db.columns())} FROM {table} WHERE id = %s",
+        [record_id]
+    )
+    record = dict(zip(db.columns(), rows[0]))
+    return respond(record, fmt, code=200)
+
+
+#task 1e
+@app.route("/suicides/<int:record_id>", methods=["DELETE"])
+def delete_suicide(record_id):
+    
+    db = get_db()
+    table = db.suic_table_name()
+    fmt = request.args.get("format", "json").lower()
+ 
+    existing = db.sql_execute(
+        f"SELECT id FROM {table} WHERE id = %s", [record_id]
+    )
+    if not existing:
+        return respond({"error": "Record not found"}, fmt, code=404)
+ 
+    db.sql_execute(f"DELETE FROM {table} WHERE id = %s", [record_id])
+    #return jsonify({"message": f"Record {record_id} deleted"}), 200
+    return respond({"message": f"Record {record_id} deleted"}, fmt, code=200)
+
+
+#task 1f 
+@app.route("/suicides/total_by_year/<int:year>", methods=["GET"])
+def total_suicides_by_year(year):
+    fmt = request.args.get("format", "json").lower()
+    db = get_db()
+    table = db.suic_table_name()
+    
+    check_rows = db.sql_execute(
+        f"SELECT COUNT(*) FROM {table} WHERE year = %s",
+        [year]
+    )
+    
+    if not check_rows or check_rows[0][0] == 0:
+        return respond({
+            "error": f"No data found for year {year}",
+            "year": year
+        }, fmt, tag='response', code=404)
+    
+    rows = db.sql_execute(
+        f"SELECT SUM(suicides_no) as total_suicides FROM {table} WHERE year = %s",
+        [year]
+    )
+    
+    total = rows[0][0] if rows and rows[0][0] is not None else 0
+    
+    result = {
+        "year": year,
+        "total_suicides_worldwide": int(total)
+    }
+    
+    return respond(result, fmt, tag='suicide_stats')
+
+
+if __name__ == "__main__":
+    #Connector().taska_creation()
+    app.run(debug=True, port=5000)
+
+--------------------------------------------------
+
+import requests
+import json
+import sys
+
+BASE_URL = "http://localhost:5000"
+
+def print_response(resp):
+
+    print(f"\nСтатус: {resp.status_code}")
+    try:
+        if resp.headers.get('content-type', '').startswith('application/json'):
+            data = resp.json()
+            print("Ответ (JSON):")
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+        else:
+            print("Ответ (текст):")
+            print(resp.text)
+    except:
+        print("Не удалось разобрать ответ")
+    print()
+
+def list_records():
+    """GET /suicides с пагинацией (фиксировано 20 записей на страницу)."""
+    page = input("Номер страницы (по умолчанию 1): ").strip()
+    page = int(page) if page else 1
+    per_page = 20  # дефолт значение
+    
+    params = {"page": page, "per_page": per_page}
+    resp = requests.get(f"{BASE_URL}/suicides", params=params)
+    print_response(resp)
+
+
+def get_record_by_id():
+
+    rid = input("ID записи: ").strip()
+    if not rid:
+        print("ID не может быть пустым.")
+        return
+    resp = requests.get(f"{BASE_URL}/suicides/{rid}")
+    print_response(resp)
+
+
+def check_year(year):
+    if year < 1985 or year > 2016:
+        print("Ошибка: год должен быть в диапазоне 1985-2016.")
+        return False
+    return True
+
+def check_int(number):
+    if number <= 0:
+        return False
+    return True
+
+def check_sex(sex):
+    if sex not in ('male', 'female'):
+        print("Ошибка: пол должен быть 'male' или 'female'.")
+        return False
+    return True
+
+def check_age(age):
+    valid_ages = ['5-14 years', '15-24 years', '25-34 years', 
+                  '35-54 years', '55-74 years', '75+ years']
+    
+    if age not in valid_ages:
+        print(f"Ошибка: возрастная группа '{age}' недопустима.")
+        print(f"Допустимые значения: {', '.join(valid_ages)}")
+        return False
+    return True
+
+def create_record():
+    """POST /suicides с поочерёдным вводом полей."""
+    valid_ages = ['5-14 years', '15-24 years', '25-34 years', 
+                  '35-54 years', '55-74 years', '75+ years']
+    
+    print("Введите данные для новой записи (все поля обязательны):")
+    country = input("Страна (country): ").strip()
+    year = input("Год (year, 1985-2016): ").strip()
+    sex = input("Пол (sex, male/female): ").strip().lower()
+    
+    print(f"Возрастные группы (age): {', '.join(valid_ages)}")
+    age = input("Возрастная группа: ").strip()
+    
+    population = input("Население (population, >0): ").strip()
+    suicides_no = input("Число суицидов (suicides_no, >=0): ").strip()
+    suicides_100k_pop = input("Суицидов на 100k населения (suicides_100k_pop, >=0): ").strip()
+
+    if not all([country, year, sex, age, population, suicides_no, suicides_100k_pop]):
+        print("Ошибка: все поля должны быть заполнены.")
+        return
+
+    try:
+        year = int(year)
+        
+        country = country[:30]
+
+        if not check_year(year):
+            #print("Ошибка: год должен быть в диапазоне 1985-2016.")
+            return
+            
+        population = int(population)
+        if not check_int(population) and not check_empty(population):
+            print("Ошибка: население должно быть больше 0.")
+            return
+            
+        suicides_no = int(suicides_no)
+        if not check_int(suicides_no) and not check_empty(suicides_no):
+            print("Ошибка: число суицидов не может быть отрицательным.")
+            return
+            
+        suicides_100k_pop = float(suicides_100k_pop)
+        if not check_int(suicides_100k_pop) and not check_empty(suicides_100k_pop):
+            print("Ошибка: показатель суицидов не может быть отрицательным.")
+            return
+        
+    except ValueError:
+        print("Ошибка: проверьте типы данных (год, население, суициды - целые числа, показатель - число).")
+        return
+
+    if not check_sex(sex) and not check_empty(sex):
+        # print("Ошибка: пол должен быть 'male' или 'female'.")
+        return
+    
+    if not check_age(age) and not check_empty(age): # not in valid_ages:
+        # print(f"Ошибка: возрастная группа '{age}' недопустима.")
+        # print(f"Допустимые значения: {', '.join(valid_ages)}")
+        return
+
+    data = {
+        "country": country,
+        "year": year,
+        "sex": sex,
+        "age": age,
+        "population": population,
+        "suicides_no": suicides_no,
+        "suicides_100k_pop": suicides_100k_pop
+    }
+
+    resp = requests.post(f"{BASE_URL}/suicides", json=data)
+    print_response(resp)
+
+def check_id(rid):
+    if not rid:
+        print("ID не должен быть пустым")
+        return False
+    
+    try:
+        resp = requests.get(f"{BASE_URL}/suicides/{rid}")
+        if resp.status_code == 404:
+            print("нет такой записи ")
+            return False
+        elif resp.status_code != 200:
+            print(f"возникла Ошибка при проверке id: {resp.status_code}")
+            return False
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка {e}")
+        return False
+    # return True
+
+def check_empty(attr):
+    if not attr:
+        print("Не может быть пустой строкой")
+        return False
+    return True 
+
+def update_record():
+    
+    rid = input("ID записи для обновления: ").strip()
+    if not check_id(rid):
+        #print("ID не может быть пустым.")
+        return
+    
+    chosen_changes = {}
+
+    while (True):
+        print("Что хотите поменять?\n"
+        "0 - выход\n"
+        "1 - country\n"
+        "2 - year\n"
+        "3 - sex\n"
+        "4 - age\n"
+        "5 - suicides_no\n"
+        "6 - population\n"
+        "7 - suicides/100k pop")
+        decision = input("Выбор: ").strip()
+        if decision == "0":
+            break
+
+        elif decision == "1":
+            country = input("Введите название страные (длина <= 30)").strip()
+            if not check_empty(country):
+                continue
+            country = country[:30]
+            chosen_changes["country"] = country
+
+        elif decision == "2":
+            year = input("Год (year, 1985-2016): ").strip()
+            try:
+                year = int(year)
+                if not check_year(year):
+                    continue
+                chosen_changes["year"] = year
+            except ValueError:
+                print("Ошибка с типами данных в числах.")
+                continue 
+        elif decision == "3":
+            sex = input("Пол (male/female): ").strip().lower()
+            if not check_sex(sex):
+                continue
+            chosen_changes["sex"] = sex
+            
+        elif decision == "4":
+            valid_ages = ['5-14 years', '15-24 years', '25-34 years', 
+                            '35-54 years', '55-74 years', '75+ years']
+            print(f"Возрастные группы (age): {', '.join(valid_ages)}")
+            age = input("Возрастная группа: ").strip()
+            
+            age = int(age)
+            if not check_age(age):
+                continue
+            chosen_changes["age"] = age
+            
+        elif decision == "5":
+            suicides_str = input("Число суицидов (suicides_no, >=0): ").strip() 
+            try:
+                suicides_no = int(suicides_str)
+                if not check_int(suicides_no) and not check_empty(suicides_no):
+                    continue
+                chosen_changes["suicides_no"] = suicides_no
+            except ValueError:
+                print("Ошибка с типами данных в числах.")
+                continue 
+        elif decision == "6":
+            pop_str = input("Население (population, >0): ").strip()
+            try:
+                population = int(pop_str)
+                if not check_int(population) and not check_empty(population):
+                    continue
+                chosen_changes["population"] = population
+            except ValueError:
+                print("Ошибка с типами данных в числах.")
+                continue 
+        elif decision == "7":
+            rate_str = input("Суицидов на 100k населения (suicides_100k_pop, >=0): ").strip()
+            try:
+                rate = float(rate_str)
+                if not check_int(rate): 
+                    continue
+                chosen_changes["suicides_100k_pop"] = rate
+            except ValueError:
+                print("Ошибка с типами данных в числах.")
+                continue 
+        else:
+            continue
+
+        # '', 'year', 'sex', 'age', 'suicides_no', 'population', 'suicides/100k pop'
+    # print("Введите обновляемые поля в JSON (можно не все, например {\"suicides_no\": 600})")
+    # data_str = input("JSON: ").strip()
+    # try:
+    #     data = json.loads(data_str)
+    # except json.JSONDecodeError:
+    #     print("Ошибка: неверный JSON.")
+    #     return
+    resp = requests.put(f"{BASE_URL}/suicides/{rid}", json=chosen_changes)
+    print_response(resp)
+
+
+def delete_record():
+    
+    rid = input("ID записи для удаления: ").strip()
+    if not check_id(rid):
+        #print("ID не может быть пустым.")
+        return
+    resp = requests.delete(f"{BASE_URL}/suicides/{rid}")
+    print_response(resp)
+    return
+
+def total_by_year():
+    
+    year = input("Год: ").strip()
+    try:
+        year = int(year)
+        if not check_year(year):
+            return
+    except: 
+        print("Ошибка с типами данных в числах.")
+        return
+    resp = requests.get(f"{BASE_URL}/suicides/total_by_year/{year}")
+    print_response(resp)
+
+
+def main():
+    menu = {
+        "1": ("Список записей (с пагинацией)", list_records),
+        "2": ("Получить запись по ID", get_record_by_id),
+        "3": ("Создать новую запись (POST)", create_record),
+        "4": ("Обновить запись (PUT)", update_record),
+        "5": ("Удалить запись (DELETE)", delete_record),
+        "6": ("Суммарное число суицидов за год", total_by_year),
+        "0": ("Выход", None)
+    }
+    
+    while True:
+        print("\n===== CLI для API суицидов =====")
+        for key, (desc, _) in menu.items():
+            print(f"{key}. {desc}")
+        choice = input("Выберите действие: ").strip()
+        
+        if choice == "0":
+            print("До свидания!")
+            break
+        elif choice in menu:
+            action = menu[choice][1]
+            if action:
+                action()
+            else:
+                break
+        else:
+            print("Неверный ввод, попробуйте снова.")
+
+if __name__ == "__main__":
+    try:
+        requests.get(f"{BASE_URL}/suicides", timeout=2)
+    except requests.exceptions.ConnectionError:
+        print("Ошибка: не удалось подключиться к серверу API.")
+        print(f"Убедитесь, что сервер запущен на {BASE_URL} (например, запустите lab3.py)")
+        sys.exit(1)
+    main()
+
+--------------------------------
+1ab
+get data
+curl -X GET "http://localhost:5000/suicides/{id}"  
+
+1c
+post insert into table
+curl -X POST -H "Content-Type: application/json" "http://localhost:5000/suicides" -d @"test_post.json"
+
+1d
+put editing record
+curl -X PUT -H "Content-Type: application/json" "http://localhost:5000/suicides/1" -d @"test_put.json"
+
+1e
+delete record
+curl -X DELETE "http://localhost:5000/suicides/2"
+

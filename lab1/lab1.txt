@@ -1,0 +1,143 @@
+#pip install xml_python
+
+import xml.etree.ElementTree as et
+
+tree = et.parse('a_groups.xml')
+root = tree.getroot()
+
+objects = root.findall('another-students-db-a-group')
+
+#TASK 2A
+
+atr_names = []
+for atr in objects[0]:
+    atr_names.append(atr.tag)
+
+print(' Collected atributes: ')
+for name in atr_names:
+    print(f' - {name}')
+
+#TASK 2B
+
+fields_w_constraints = dict()
+for object in objects:
+    for element in object:
+        tag_name = element.tag
+        xml_type = element.get('type')
+
+        if xml_type is None:
+            xml_type = 'string'
+        value = element.text
+
+        if tag_name not in fields_w_constraints.keys():
+            fields_w_constraints[tag_name] = {
+                "type": xml_type,
+                "not_null": value is not None,
+                "possible_values": set()
+            }
+        
+        if xml_type == "string": 
+            current_max = fields_w_constraints[tag_name]["max_len"] if "max_len" in fields_w_constraints[tag_name] else -1
+            current_len = 0 if value is None else len(value)
+            fields_w_constraints[tag_name]["max_len"] = max(current_max, current_len)
+
+        if fields_w_constraints[tag_name]["not_null"]:
+            fields_w_constraints[tag_name]["not_null"] = value is not None
+        
+        if len(fields_w_constraints[tag_name]["possible_values"]) < 6:
+            fields_w_constraints[tag_name]["possible_values"].add(value)
+
+#print(fields_w_constraints)
+print('Поля:\n')
+for field, data in fields_w_constraints.items():
+    print(f"Поле: {field}")
+    print(f'\tТип данных: {data["type"]}')
+    if "max_len" in data:
+        print(f'\tМаксимальная длина строки: {data["max_len"]}')
+    print(f"\tНеобходимо поставить NOT_NULL: {'Да' if data['not_null'] else 'Нет'}")
+    print(f'count of possible values = {len(data["possible_values"])}')
+    if 2 <= len(data["possible_values"]) <= 5:
+        print(f"\tCHECK ({field} in ({', '.join(data['possible_values'])}))")
+
+
+# TASK 3
+"""
+CREATE TABLE another_students_db_a_group (
+    id INTEGER PRIMARY KEY,
+    name VARCHAR(11) NOT NULL,
+    old_name VARCHAR(8),
+    term_number INTEGER NOT NULL,
+    study_year VARCHAR(9) NOT NULL,
+    created_at DATE NOT NULL,
+    updated_at DATE NOT NULL
+);
+"""
+
+<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">
+<xsl:output method="html" encoding="UTF-8"/>
+
+<xsl:key name="unique" match="another-students-db-a-group" 
+         use="concat(name, '|', term-number, '|', study-year, '|', 
+                substring(created-at,1,10), '|', substring(updated-at,1,10), '|', old-name)" />
+
+<xsl:template match="/">
+<pre>
+CREATE TABLE another_students_db_a_group (
+    id INTEGER PRIMARY KEY,
+    name VARCHAR(11) NOT NULL,
+    old_name VARCHAR(8),
+    term_number INTEGER NOT NULL,
+    study_year VARCHAR(9) NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
+INSERT ALL
+<xsl:for-each select="//another-students-db-a-group[
+    generate-id() = generate-id(key('unique', 
+        concat(name, '|', term-number, '|', study-year, '|',
+               substring(created-at,1,10), '|', substring(updated-at,1,10), '|', old-name))[1])]">
+
+    INTO another_students_db_a_group VALUES (<xsl:value-of select="id + 10000"/>, '<xsl:value-of select="name"/>', 
+    <xsl:choose>
+        <xsl:when test="old-name/@nil='true' or old-name=''">NULL</xsl:when>
+        <xsl:otherwise>'<xsl:value-of select="old-name"/>'</xsl:otherwise>
+    </xsl:choose>
+    , <xsl:value-of select="term-number"/>, '<xsl:value-of select="study-year"/>', 
+    '<xsl:value-of select="substring(created-at,1,25)"/>', 
+    '<xsl:value-of select="substring(updated-at,1,25)"/>')
+</xsl:for-each>
+SELECT * FROM dual;
+</pre>
+</xsl:template>
+
+</xsl:stylesheet>
+
+
+-- TASK 5
+CREATE TABLE another_students_db_a_group (
+    id INTEGER PRIMARY KEY,
+    name VARCHAR(11) NOT NULL,
+    old_name VARCHAR(8),
+    term_number INTEGER NOT NULL,
+    study_year VARCHAR(9) NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+
+INSERT ALL
+
+
+    INTO another_students_db_a_group VALUES (32673, 'Ф02-05', 
+    NULL
+    , 2, '2014/2015', 
+    '2018-05-03T04:18:26+03:00', 
+    '2018-05-03T04:18:26+03:00')
+
+
+    INTO another_students_db_a_group VALUES (32674, 'Ф01-05', 
+    NULL
+    , 1, '2014/2015', 
+    '2018-05-03T04:18:26+03:00', 
+    '2018-05-03T04:18:26+03:00')
